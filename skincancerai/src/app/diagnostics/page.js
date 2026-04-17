@@ -5,6 +5,7 @@ import Navbar from "../components/navbar_diagnostics";
 
 export default function DiagnosticsPage() {
   const API_BASE = (process.env.NEXT_PUBLIC_API_BASE || "").replace(/\/+$/, "");
+  const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
   const [error, setError] = useState("");
   const [image, setImage] = useState(null);
@@ -63,6 +64,11 @@ export default function DiagnosticsPage() {
 
     if (!result) {
       setError("Please analyze the image first.");
+      return;
+    }
+
+    if (DEMO_MODE) {
+      window.open("/demo-report.pdf", "_blank", "noopener,noreferrer");
       return;
     }
 
@@ -225,13 +231,20 @@ export default function DiagnosticsPage() {
                       ))}
                     </div>
 
+                    {DEMO_MODE && (
+                      <p className="text-xs text-slate-500 mb-2">
+                        Demo mode: The PDF report is a sample preview and is not generated from your uploaded image.
+                        Generating reports requires additional processing, which exceeds the compute limits of the current deployment environment.
+                        To generate the actual report, deploy the project locally while following the instructions found on the GitHub repo in the README.md file.
+                      </p>
+                    )}
                     <button
                       type="button"
                       onClick={downloadReport}
                       className="mt-3 w-full rounded-xl border border-emerald-900 text-emerald-900 py-3.5 font-semibold hover:bg-emerald-50 transition-colors"
                       disabled={loading}
                     >
-                      {loading ? "Generating..." : "Open PDF report"}
+                      {loading ? "Generating..." : DEMO_MODE ? "Open Demo PDF Report" : "Open PDF Report"}
                     </button>
                   </>
                 ) : (
