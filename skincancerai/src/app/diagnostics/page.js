@@ -4,7 +4,7 @@ import { useState } from "react";
 import Navbar from "../components/navbar_diagnostics";
 
 export default function DiagnosticsPage() {
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
+  const API_BASE = (process.env.NEXT_PUBLIC_API_BASE || "").replace(/\/+$/, "");
 
   const [error, setError] = useState("");
   const [image, setImage] = useState(null);
@@ -61,12 +61,21 @@ export default function DiagnosticsPage() {
       return;
     }
 
+    if (!result) {
+      setError("Please analyze the image first.");
+      return;
+    }
+
     setLoading(true);
     setError("");
 
     try {
       const fd = new FormData();
       fd.append("file", image);
+      fd.append("label", result.label);
+      fd.append("confidence_pct", String(result.confidence_pct));
+      fd.append("probabilities_pct", JSON.stringify(result.probabilities_pct));
+      fd.append("recommendation", result.recommendation);
 
       const res = await fetch(`${API_BASE}/report`, {
         method: "POST",

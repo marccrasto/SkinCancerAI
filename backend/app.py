@@ -1,11 +1,12 @@
 import io
 import os
+import json
 from typing import Dict, Tuple, Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.responses import StreamingResponse, JSONResponse
 from PIL import Image
 
@@ -201,7 +202,7 @@ def build_pdf(
     label: str,
     conf_pct: float,
     probs_dict: Dict[str, float],
-    overlay_img: Optional[Image.Image],
+    recommendation: str,
 ) -> io.BytesIO:
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=letter)
@@ -227,9 +228,9 @@ def build_pdf(
     p.wrapOn(c, 500, 100)
     p.drawOn(c, 50, H - 90)
 
-    # Images (left original, right overlay)
+    # Image snapshot
     c.setFont("Helvetica-Bold", 11)
-    c.drawCentredString(W/2, H - 120, "Image snapshot")
+    c.drawCentredString(W / 2, H - 120, "Image snapshot")
 
     img_size = 240
     center_x = (W - img_size) / 2
@@ -251,14 +252,14 @@ def build_pdf(
     c.setFont("Helvetica", 11)
 
     if label == "Malignant":
-        c.setFillColorRGB(1,0,0)
+        c.setFillColorRGB(1, 0, 0)
     elif label == "Benign":
-        c.setFillColorRGB(1,0.6,0)
+        c.setFillColorRGB(1, 0.6, 0)
     else:
-        c.setFillColorRGB(0,0.6,0)
+        c.setFillColorRGB(0, 0.6, 0)
 
     c.drawString(50, H - 435, f"Risk classification: {label}")
-    c.setFillColorRGB(0,0,0)
+    c.setFillColorRGB(0, 0, 0)
     c.drawString(50, H - 455, f"Confidence score: {conf_pct:.2f}%")
 
     c.setFont("Helvetica-Bold", 11)
@@ -269,15 +270,15 @@ def build_pdf(
         c.drawString(60, y, f"- {k}: {v:.2f}%")
         y -= 14
 
-    # Recommendation + next steps (keep cautious)
+    # Recommendation
     c.setFont("Helvetica-Bold", 11)
     c.drawString(50, y - 10, "Recommendation")
     c.setFont("Helvetica", 10)
-    rec = get_recommendation(label)
-    p = Paragraph(rec, style)
+    p = Paragraph(recommendation, style)
     p.wrapOn(c, 500, 100)
     p.drawOn(c, 50, y - 45)
 
+    # Next steps
     c.setFont("Helvetica-Bold", 11)
     c.drawString(50, y - 65, "Next steps")
     c.setFont("Helvetica", 10)
@@ -332,24 +333,31 @@ async def predict_json(file: UploadFile = File(...)):
     })
 
 @app.post("/report")
-async def report_pdf(file: UploadFile = File(...)):
+async def report_pdf(
+    file: UploadFile = File(...),
+    label: str = Form(...),
+    confidence_pct: float = Form(...),
+    probabilities_pct: str = Form(...),
+    recommendation: str = Form(...),
+):
     raw = await file.read()
     try:
         img = Image.open(io.BytesIO(raw)).convert("RGB")
     except Exception:
         raise HTTPException(status_code=400, detail="Could not read image.")
 
-    label, conf_pct, probs_dict, class_idx = predict(img)
-
-    # Optional Grad-CAM overlay
-    overlay = make_gradcam_overlay(img, class_idx)
+    try:
+        probs_dict = json.loads(probabilities_pct)
+        probs_dict = {k: float(v) for k, v in probs_dict.items()}
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid probabilities data.")
 
     pdf_buf = build_pdf(
         original_img=img,
         label=label,
-        conf_pct=conf_pct,
+        conf_pct=confidence_pct,
         probs_dict=probs_dict,
-        overlay_img=overlay,
+        recommendation=recommendation,
     )
 
     headers = {"Content-Disposition": 'inline; filename="skin_lesion_report.pdf"'}
