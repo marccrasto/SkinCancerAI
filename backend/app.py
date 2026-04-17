@@ -306,6 +306,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+def root():
+    return {"message": "Skin Cancer AI Backend is running"}
+
 @app.get("/health")
 def health():
     return {"status": "ok", "device": str(DEVICE), "model_path": MODEL_PATH}
